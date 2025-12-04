@@ -15,17 +15,17 @@
 #    limitations under the License.
 #
 
+import asyncio
 import logging
 import random
 import string
-import time
 
 from mobly import asserts
 
 import matter.clusters as Clusters
 from matter.clusters.Types import NullValue
 from matter.interaction_model import InteractionModelError, Status
-from matter.testing.matter_testing import type_matches
+from matter.testing.matter_testing import matchers
 
 
 class DRLK_COMMON:
@@ -65,7 +65,7 @@ class DRLK_COMMON:
                                                                                               userType=userType),
                                          endpoint=self.endpoint,
                                          timedRequestTimeoutMs=1000)
-        asserts.assert_true(type_matches(ret, Clusters.Objects.DoorLock.Commands.SetCredentialResponse),
+        asserts.assert_true(matchers.is_type(ret, Clusters.Objects.DoorLock.Commands.SetCredentialResponse),
                             "Unexpected return type for SetCredential")
         asserts.assert_true(ret.status == Status.Success, "Error sending SetCredential command, status={}".format(str(ret.status)))
         return ret
@@ -76,7 +76,7 @@ class DRLK_COMMON:
                                    timedRequestTimeoutMs=1000)
         ret = await self.send_single_cmd(cmd=Clusters.Objects.DoorLock.Commands.GetCredentialStatus(credential=credential),
                                          endpoint=self.endpoint)
-        asserts.assert_true(type_matches(ret, Clusters.Objects.DoorLock.Commands.GetCredentialStatusResponse),
+        asserts.assert_true(matchers.is_type(ret, Clusters.Objects.DoorLock.Commands.GetCredentialStatusResponse),
                             "Unexpected return type for GetCredentialStatus")
         asserts.assert_false(ret.credentialExists, "Error clearing Credential (credentialExists==True)")
 
@@ -108,7 +108,7 @@ class DRLK_COMMON:
 
     async def read_and_verify_pincode_length(self, attribute, failure_message: str, min_range=0, max_range=255):
         pin_code_length = await self.read_drlk_attribute_expect_success(attribute=attribute)
-        verify_pin_code_length = True if min_range <= pin_code_length <= max_range else False
+        verify_pin_code_length = min_range <= pin_code_length <= max_range
         asserts.assert_true(verify_pin_code_length, f"{failure_message}, got value {pin_code_length}")
         return pin_code_length
 
@@ -126,7 +126,7 @@ class DRLK_COMMON:
 
         # Allow for user overrides of these values
         self.user_index = self.user_params.get("user_index", 1)
-        self.endpoint = self.user_params.get("endpoint", 1)
+        self.endpoint = self.get_endpoint()
         credentialIndex = self.user_params.get("credential_index", 1)
         userCodeTemporaryDisableTime = self.user_params.get("user_code_temporary_disable_time", 15)
         wrongCodeEntryLimit = self.user_params.get("wrong_code_entry_limit", 3)
@@ -204,7 +204,7 @@ class DRLK_COMMON:
                                                                        userType=NullValue
                                                                        )
                 asserts.assert_true(
-                    type_matches(set_cred_response, Clusters.Objects.DoorLock.Commands.SetCredentialResponse),
+                    matchers.is_type(set_cred_response, Clusters.Objects.DoorLock.Commands.SetCredentialResponse),
                     "Unexpected return type for SetCredential")
             self.print_step("4e", f"TH sends {lockUnlockText} Command to the DUT with PINCode as pin_code.")
             if self.check_pics(lockUnlockCmdRspPICS):
@@ -289,7 +289,7 @@ class DRLK_COMMON:
 
             if self.check_pics("DRLK.S.A0031"):
                 self.print_step("14", "Wait for UserCodeTemporaryDisableTime seconds")
-                time.sleep(userCodeTemporaryDisableTime_dut)
+                await asyncio.sleep(userCodeTemporaryDisableTime_dut)
 
             if not doAutoRelockTest:
                 self.print_step("15", "Send %s with valid Pincode and verify success" % lockUnlockText)
@@ -322,7 +322,7 @@ class DRLK_COMMON:
                 if self.check_pics("DRLK.S.A0000"):
                     self.print_step("18", "TH reads LockState attribute after AutoRelockTime Expires")
                     # Add additional wait time buffer for motor movement, etc.
-                    time.sleep(autoRelockTime_dut + 5)
+                    await asyncio.sleep(autoRelockTime_dut + 5)
                     lockstate_dut = await self.read_drlk_attribute_expect_success(attribute=attributes.LockState)
                     logging.info("Current LockState is %s" % (lockstate_dut))
                     asserts.assert_equal(lockstate_dut, Clusters.DoorLock.Enums.DlLockState.kLocked,

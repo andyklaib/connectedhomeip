@@ -71,7 +71,7 @@ import matter.clusters as Clusters
 from matter import ChipDeviceCtrl
 from matter.interaction_model import Status
 from matter.testing.apps import AppServerSubprocess
-from matter.testing.matter_testing import MatterBaseTest, TestStep, async_test_body, default_matter_test_main, type_matches
+from matter.testing.matter_testing import MatterBaseTest, TestStep, async_test_body, default_matter_test_main, matchers
 
 _DEVICE_TYPE_AGGREGATOR = 0x000E
 
@@ -86,6 +86,7 @@ class TC_MCORE_FS_1_3(MatterBaseTest):
     def setup_class(self):
         super().setup_class()
 
+        self.dut_fsa_stdin = None
         self.th_server = None
         self.storage = None
 
@@ -105,7 +106,7 @@ class TC_MCORE_FS_1_3(MatterBaseTest):
             dut_fsa_stdin_pipe = self.user_params.get("dut_fsa_stdin_pipe")
             if not dut_fsa_stdin_pipe:
                 asserts.fail("CI setup requires --string-arg dut_fsa_stdin_pipe:<path_to_pipe>")
-            self.dut_fsa_stdin = open(dut_fsa_stdin_pipe, "w")
+            self.dut_fsa_stdin = open(dut_fsa_stdin_pipe, "w")  # noqa: SIM115
 
         self.th_server_port = 5544
         self.th_server_discriminator = random.randint(0, 4095)
@@ -123,6 +124,8 @@ class TC_MCORE_FS_1_3(MatterBaseTest):
             timeout=30)
 
     def teardown_class(self):
+        if self.dut_fsa_stdin is not None:
+            self.dut_fsa_stdin.close()
         if self.th_server is not None:
             self.th_server.terminate()
         if self.storage is not None:
@@ -193,7 +196,7 @@ class TC_MCORE_FS_1_3(MatterBaseTest):
         # Open commissioning window on TH_SERVER_NO_UID.
         discriminator = random.randint(0, 4095)
         params = await self.default_controller.OpenCommissioningWindow(
-            nodeid=th_server_th_node_id,
+            nodeId=th_server_th_node_id,
             option=self.default_controller.CommissioningWindowPasscode.kTokenWithRandomPin,
             discriminator=discriminator,
             iteration=10000,
@@ -242,7 +245,7 @@ class TC_MCORE_FS_1_3(MatterBaseTest):
             cluster=Clusters.BridgedDeviceBasicInformation,
             attribute=Clusters.BridgedDeviceBasicInformation.Attributes.UniqueID,
             endpoint=dut_fsa_bridge_th_server_endpoint)
-        asserts.assert_true(type_matches(dut_fsa_bridge_th_server_unique_id, str), "UniqueID should be a string")
+        asserts.assert_true(matchers.is_type(dut_fsa_bridge_th_server_unique_id, str), "UniqueID should be a string")
         asserts.assert_true(dut_fsa_bridge_th_server_unique_id, "UniqueID should not be an empty string")
         logging.info("UniqueID generated for TH_SERVER_NO_UID: %s", dut_fsa_bridge_th_server_unique_id)
 
